@@ -44,11 +44,9 @@ mongodb+srv://otp-prod-app:<password>@cluster1.xxxxx.mongodb.net/otpSend-prod?re
 
 ### 1.4 Test it from your computer
 
-1. Create `server/.env.production.local`. Git ignores it. It holds one line:
+1. Open `server/.env.production.local`. It holds your production settings and git ignores it. Replace `MONGODB_URI=CHANGE-ME` with the string from 1.3.
 
-   ```
-   MONGODB_URI=mongodb+srv://otp-prod-app:...@.../otpSend-prod?retryWrites=true&w=majority
-   ```
+   If the file doesn't exist, create it with the variables listed in section 3.2.
 
 2. Run:
 
@@ -61,4 +59,86 @@ mongodb+srv://otp-prod-app:<password>@cluster1.xxxxx.mongodb.net/otpSend-prod?re
 
 This connects with the production credentials and creates the indexes (unique emails, TTL auto-delete) before the first real user arrives.
 
-> Keep this URI. You will paste it into Render as `MONGODB_URI` in the next section.
+---
+
+## 2. Brevo: production email
+
+Gmail SMTP is fine on your laptop, but not for a public app:
+
+- It's limited to about 500 emails a day.
+- Mail sent to other people often lands in Spam.
+- Render's free tier blocks outgoing SMTP ports.
+
+Brevo's **HTTPS API** avoids all three, and the app supports it with `EMAIL_PROVIDER=brevo`.
+
+1. **Verify a sender:** Brevo → Settings → **Senders, domains, IPs** → **Add sender**. Use the same address as `EMAIL_FROM`, then click the confirmation link Brevo emails you. Status: **Verified**.
+2. **Create an API key:** Settings → **SMTP & API** → **API keys & MCP** tab → **Generate a new API key** → name it `otp-render` → copy it.
+   - It is shown **only once**. Put it straight into `BREVO_API_KEY` in `server/.env.production.local`.
+   - This is not the SMTP key on the SMTP tab; that's a different credential.
+
+### About the "Freemail domain is not recommended" warning
+
+Your sender is a `@gmail.com` address, but Brevo's servers send the email, not Gmail's. Receiving servers check two DNS-based signatures:
+
+- **DKIM:** was this email signed by the domain it claims to come from?
+- **DMARC:** that domain's policy for unsigned mail.
+
+Brevo can't sign as `gmail.com`, so those checks can't fully pass. In practice, Brevo may substitute its own sending domain, and some messages may land in Spam, especially at Outlook and Yahoo.
+
+- **Fine for learning and testing.**
+- **For a real product,** buy a domain (around $10 a year), add it under **Domains**, and add the DNS records Brevo shows you (DKIM, DMARC). Then send from `no-reply@yourdomain.com`.
+
+---
+
+## 3. Render: backend
+
+### 3.1 Create the web service
+
+1. render.com → **New** → **Web Service** → **Git Provider: GitHub** → allow access to `lazyone01/otpSend` → **Connect**.
+2. Settings:
+
+   | Field | Value | Why |
+   |---|---|---|
+   | Name | e.g. `otpsend-api` | Becomes `https://otpsend-api.onrender.com` |
+   | Region | Same region as your Atlas cluster (e.g. Singapore for Mumbai) | Fewer milliseconds per database query |
+   | Branch | `main` | Every push to `main` redeploys automatically |
+   | **Root Directory** | `server` | The repository holds two apps; this one lives in `server/` |
+   | Runtime | Node | |
+   | Build Command | `npm ci` | Installs the exact versions from `package-lock.json` |
+   | Start Command | `npm start` | Runs `node server.js` |
+   | Instance Type | Free | |
+
+3. **Advanced** → **Health Check Path**: `/api/health`. Render waits for this to return 200 before sending traffic to a new deploy, so a broken deploy never replaces a working one.
+
+### 3.2 Environment variables
+
+**Environment Variables** → **Add from .env** → paste the contents of `server/.env.production.local`, with every `CHANGE-ME` filled in except `CLIENT_URL`.
+
+- Do **not** set `PORT`. Render sets it and the app reads it.
+- `CLIENT_URL` stays `https://CHANGE-ME.vercel.app` for now. Your Vercel URL doesn't exist yet; you'll update it in section 5.
+
+### 3.3 Deploy and check
+
+Click **Deploy Web Service**. In **Logs** you should see:
+
+```
+MongoDB connected: otpSend-prod
+Email provider verified (brevo)
+Server running on port 10000 (production)
+```
+
+Then open `https://<name>.onrender.com/api/health` → `{"status":"ok","database":"connected"}`.
+
+| Log message | Cause |
+|---|---|
+| `Missing required environment variable: X` | Variable not set, or typo in its name |
+| `In production, CLIENT_URL must be your https:// frontend URL` | `CLIENT_URL` starts with `http://` |
+| `Failed to connect to MongoDB: bad auth` | Wrong user or password in `MONGODB_URI` |
+| `Failed to connect to MongoDB: ... timed out` / `ServerSelection` | Atlas Network Access doesn't allow `0.0.0.0/0` |
+| `Email provider verification failed (brevo): BREVO_401` | Wrong or deleted `BREVO_API_KEY` |
+
+### 3.4 Free-tier sleep
+
+Free Render services **sleep after 15 minutes without traffic**. The next request wakes the service, which takes about a minute, so the first "Send OTP" after a quiet period is slow.
+
+To keep it awake, set up a free monitor at [UptimeRobot](https://uptimerobot.com) or cron-job.org to request `https://<name>.onrender.com/api/health` every 10 minutes. That fits within the free plan's 750 hours a month for one service.

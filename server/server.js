@@ -17,9 +17,9 @@ async function start() {
   // Not fatal: logged-in users can still use the app while email is down.
   try {
     await verifyEmailTransport();
-    console.log('SMTP connection verified');
+    console.log(`Email provider verified (${env.emailProvider})`);
   } catch (err) {
-    console.error('SMTP verification failed:', err.code || '', err.message);
+    console.error(`Email provider verification failed (${env.emailProvider}):`, err.code || '', err.message);
   }
 
   const server = app.listen(env.port, () => {
