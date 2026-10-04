@@ -33,19 +33,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// TEMPORARY diagnostic (remove after configuring TRUST_PROXY): shows which client-IP headers
-// reach the app through Vercel and Render. Only reveals the caller's own IP and proxy IPs.
-app.get('/api/debug/ip', (req, res) => {
-  res.json({
-    reqIp: req.ip,
-    xForwardedFor: req.get('x-forwarded-for') || null,
-    trueClientIp: req.get('true-client-ip') || null,
-    cfConnectingIp: req.get('cf-connecting-ip') || null,
-    xRealIp: req.get('x-real-ip') || null,
-    xVercelForwardedFor: req.get('x-vercel-forwarded-for') || null,
-  });
-});
-
 // Only our frontend may call this API from a browser.
 // credentials: true lets the browser send/receive cookies cross-origin (needed for the JWT cookie).
 app.use(

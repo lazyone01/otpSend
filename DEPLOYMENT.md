@@ -190,12 +190,27 @@ CLIENT_URL=https://otpsend.vercel.app      ← your exact Vercel production URL,
 | Variable | Where | Value |
 |---|---|---|
 | `CLIENT_URL` | Render | Your Vercel production URL. Used for CORS, the CSRF check and links in reset emails. |
+| `TRUST_PROXY` | Render | `4`. Requests pass Vercel → Cloudflare → Render load balancer → Render internal hop; 4 makes rate limits see the real user IP (measured, see below). |
 | `VITE_API_URL` | Vercel | **Not set.** API calls go to `/api` on the Vercel domain. |
 | everything else | Render | From `server/.env.production.local` (section 3.2) |
 
 Also update `CLIENT_URL` in `server/.env.production.local`, so your local copy matches what's deployed.
 
 ---
+
+### Why `TRUST_PROXY=4`
+
+The `X-Forwarded-For` header that reaches the app through Vercel looks like this:
+
+```
+<real user IP>, <Vercel IP>, <Cloudflare IP>, <Render internal IP>
+```
+
+Express counts trusted hops from the right, starting with the network connection itself, so 4 lands on the real user.
+
+- **Too low** (e.g. 1): every request seems to come from a Render machine, so per-IP limits are useless or block everyone together.
+- **Too high:** users can fake their IP. Vercel strips fake `X-Forwarded-For` headers, but someone calling the Render URL **directly** can still add one. That can dodge the per-IP limits only. The per-email limits, the 60s cooldown and the 5-attempt limit still apply.
+- **Fully closing that gap** would mean Render rejecting traffic that didn't come through Vercel (a secret header added by Vercel middleware). That's a possible future improvement.
 
 ## 6. CORS and HTTPS: how this setup works
 
