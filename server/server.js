@@ -1,41 +1,57 @@
-import app from './app.js';
-import { env } from './config/env.js';
-import { connectDB, disconnectDB } from './config/db.js';
-import { verifyEmailTransport } from './services/emailService.js';
+// Entry point. Logs each startup stage, so if the app ever hangs while starting,
+// the hosting logs show exactly where.
+console.log(`Starting (Node.js ${process.version})...`);
 
-async function start() {
-  try {
-    // Connect to the database BEFORE accepting requests -
-    // every auth endpoint needs it, so there's no point starting without it.
-    await connectDB();
-  } catch (err) {
-    console.error('Failed to connect to MongoDB:', err.message);
-    process.exit(1); // Hosting platforms restart crashed processes automatically.
-  }
+let stage = 'loading app code';
 
-  // Check the SMTP login at startup so bad credentials show up in the logs immediately.
-  // Not fatal: logged-in users can still use the app while email is down.
-  try {
-    await verifyEmailTransport();
-    console.log(`Email provider verified (${env.emailProvider})`);
-  } catch (err) {
-    console.error(`Email provider verification failed (${env.emailProvider}):`, err.code || '', err.message);
-  }
+// Watchdog: if the server isn't listening within 90s, say where it got stuck and exit,
+// instead of hanging silently until the host gives up (Render waits 15 minutes).
+const startupWatchdog = setTimeout(() => {
+  console.error(`Startup timed out after 90s while ${stage}.`);
+  process.exit(1);
+}, 90_000);
 
-  const server = app.listen(env.port, () => {
-    console.log(`Server running on port ${env.port} (${env.nodeEnv})`);
-  });
+// Dynamic imports (instead of `import ... from` at the top) so the line above is printed
+// BEFORE all the app code is loaded - static imports always run first.
+const { default: app } = await import('./app.js');
+const { env } = await import('./config/env.js');
+const { connectDB, disconnectDB } = await import('./config/db.js');
+const { verifyEmailTransport } = await import('./services/emailService.js');
 
-  // Hosting platforms send SIGTERM when redeploying. Finish in-flight requests, then close cleanly.
-  const shutdown = () => {
-    console.log('Shutting down...');
-    server.close(async () => {
-      await disconnectDB();
-      process.exit(0);
-    });
-  };
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
+try {
+  // Connect to the database BEFORE accepting requests -
+  // every auth endpoint needs it, so there's no point starting without it.
+  stage = 'connecting to MongoDB';
+  console.log('Connecting to MongoDB...');
+  await connectDB();
+} catch (err) {
+  console.error('Failed to connect to MongoDB:', err.message);
+  process.exit(1); // Hosting platforms restart crashed processes automatically.
 }
 
-start();
+// Check the email login at startup so bad credentials show up in the logs immediately.
+// Not fatal: logged-in users can still use the app while email is down.
+try {
+  stage = `verifying the email provider (${env.emailProvider})`;
+  await verifyEmailTransport();
+  console.log(`Email provider verified (${env.emailProvider})`);
+} catch (err) {
+  console.error(`Email provider verification failed (${env.emailProvider}):`, err.code || '', err.message);
+}
+
+stage = `opening port ${env.port}`;
+const server = app.listen(env.port, () => {
+  clearTimeout(startupWatchdog);
+  console.log(`Server running on port ${env.port} (${env.nodeEnv})`);
+});
+
+// Hosting platforms send SIGTERM when redeploying. Finish in-flight requests, then close cleanly.
+const shutdown = () => {
+  console.log('Shutting down...');
+  server.close(async () => {
+    await disconnectDB();
+    process.exit(0);
+  });
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);

@@ -10,7 +10,9 @@ export const PASSWORD_MAX_LENGTH = 64;
 
 // Used when the email doesn't exist, so "unknown email" takes as long as "wrong password".
 // Otherwise an attacker could time responses to find out which emails have accounts.
-const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing', BCRYPT_COST);
+// A fixed cost-12 hash of a random value nobody knows (not a secret). Hard-coded instead of
+// computed at startup: hashing blocks the CPU, and on a tiny 0.1-CPU host that delays boot.
+const DUMMY_HASH = '$2b$12$XQ3d4A2tPi4rHPAL7pQMMuDGWksOkD4DguWKoEdssVy2K2j5tbDDS';
 
 // Throws a 400 with a user-friendly message if the password is not acceptable.
 export function validateNewPassword(password, email) {

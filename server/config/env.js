@@ -29,12 +29,14 @@ function readClientUrl() {
   } catch {
     throw new Error(`CLIENT_URL is not a valid URL: ${JSON.stringify(value)}`);
   }
-  if (url.origin !== value) {
+  // url.origin is what browsers send: lowercase host, no path. Hostnames ignore case, so only
+  // reject values that differ in more than case (a path, query string, stray characters...).
+  if (url.origin !== value.toLowerCase()) {
     throw new Error(
       `CLIENT_URL must be only the site address, like https://your-app.vercel.app (got ${JSON.stringify(value)})`
     );
   }
-  return value;
+  return url.origin;
 }
 
 function oneOf(name, allowed, fallback) {
