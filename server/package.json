@@ -12,7 +12,7 @@
     "db:check:prod": "node --env-file=.env.production.local scripts/checkDb.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

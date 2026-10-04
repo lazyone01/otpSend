@@ -22,6 +22,17 @@ app.set('trust proxy', env.trustProxy);
 // in an iframe", "only talk to me over HTTPS", and removes the "X-Powered-By: Express" header.
 app.use(helmet());
 
+// Health check: hosting platforms call this to see if the app is alive (Render waits for it
+// before switching traffic to a new deploy). Registered BEFORE cors, body parsing and rate limits,
+// so a configuration mistake there can never make the health check itself fail or be throttled.
+app.get('/api/health', (req, res) => {
+  const dbConnected = mongoose.connection.readyState === 1;
+  res.status(dbConnected ? 200 : 503).json({
+    status: dbConnected ? 'ok' : 'degraded',
+    database: dbConnected ? 'connected' : 'disconnected',
+  });
+});
+
 // Only our frontend may call this API from a browser.
 // credentials: true lets the browser send/receive cookies cross-origin (needed for the JWT cookie).
 app.use(
@@ -36,16 +47,6 @@ app.use(express.json({ limit: '10kb' }));
 
 // Parse the Cookie header into req.cookies (so requireAuth can read the JWT).
 app.use(cookieParser());
-
-// Health check: useful for you, and hosting platforms can ping it to see if the app is alive.
-// Registered before the limiters so platform health checks never get rate-limited.
-app.get('/api/health', (req, res) => {
-  const dbConnected = mongoose.connection.readyState === 1;
-  res.status(dbConnected ? 200 : 503).json({
-    status: dbConnected ? 'ok' : 'degraded',
-    database: dbConnected ? 'connected' : 'disconnected',
-  });
-});
 
 // Every /api request: overall rate limit, then reject cross-site POSTs (CSRF).
 app.use('/api', apiLimiter, requireSameOrigin);

@@ -1,11 +1,38 @@
 import 'dotenv/config';
 
+// Values pasted into hosting dashboards often pick up an invisible trailing space or line break.
+// Those break things in confusing ways (e.g. an invalid HTTP header), so strip them everywhere.
+for (const [key, value] of Object.entries(process.env)) {
+  if (typeof value === 'string' && value !== value.trim()) {
+    process.env[key] = value.trim();
+  }
+}
+
 // Fail fast: if a required variable is missing, crash at startup with a clear message
 // instead of failing mysteriously later in the middle of a request.
 function required(name) {
   const value = process.env[name];
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
+// CLIENT_URL must be exactly an origin: scheme + host (+ port), nothing else.
+// Browsers compare it character by character with the Origin header (CORS, CSRF check).
+function readClientUrl() {
+  // Trailing slash removed: browsers send "https://app.com" as the Origin, never "https://app.com/".
+  const value = (process.env.CLIENT_URL || 'http://localhost:5174').replace(/\/+$/, '');
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`CLIENT_URL is not a valid URL: ${JSON.stringify(value)}`);
+  }
+  if (url.origin !== value) {
+    throw new Error(
+      `CLIENT_URL must be only the site address, like https://your-app.vercel.app (got ${JSON.stringify(value)})`
+    );
   }
   return value;
 }
@@ -31,9 +58,7 @@ export const env = {
   port: Number(process.env.PORT) || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction,
-  // Trailing slash removed: browsers send "https://app.com" as the Origin, never "https://app.com/",
-  // and CORS compares them character by character.
-  clientUrl: (process.env.CLIENT_URL || 'http://localhost:5174').replace(/\/+$/, ''),
+  clientUrl: readClientUrl(),
   // Number of proxies in front of the app (Render/Railway: 1). 0 locally - nothing in front of us.
   trustProxy: process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) : isProduction ? 1 : 0,
   // "lax" when the browser sees frontend and API as the SAME site (local dev, or the Vercel /api proxy).

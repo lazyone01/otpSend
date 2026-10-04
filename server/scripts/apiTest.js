@@ -107,7 +107,8 @@ async function run() {
     check('health endpoint reports database connected', r.status === 200 && r.json.database === 'connected', show(r));
     check('Helmet security headers present', Boolean(r.headers.get('x-content-type-options') && r.headers.get('strict-transport-security')));
     check('X-Powered-By header hidden', !r.headers.get('x-powered-by'));
-    check('CORS allows our frontend', r.headers.get('access-control-allow-origin') === env.clientUrl);
+    const corsCheck = await api('/api/auth/me');
+    check('CORS allows our frontend', corsCheck.headers.get('access-control-allow-origin') === env.clientUrl);
 
     const csrf = await api('/api/auth/logout', { method: 'POST', origin: 'https://evil.example' });
     check('POST from another website is blocked (CSRF)', csrf.status === 403, show(csrf));
