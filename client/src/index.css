@@ -48,6 +48,27 @@ input {
 }
 input:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: transparent; }
 
+/* Password field with show/hide button inside its right edge */
+.password-field { position: relative; }
+.password-field input { padding-right: 48px; }
+.password-field input::-ms-reveal { display: none; } /* Edge's own eye icon - we have ours */
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 6px;
+}
+.password-toggle:hover:not(:disabled) { color: var(--text); background: var(--bg); }
+.password-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
 .otp-input {
   font-size: 1.75rem;
   letter-spacing: 0.5em;

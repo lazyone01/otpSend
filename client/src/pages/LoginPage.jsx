@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Alert from '../components/Alert.jsx';
+import PasswordInput from '../components/PasswordInput.jsx';
 import { authApi } from '../services/api.js';
 import { savePendingLogin } from '../services/pendingLogin.js';
 
@@ -113,9 +114,8 @@ export default function LoginPage() {
                 Forgot password?
               </Link>
             </div>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="current-password" // lets password managers fill it in
               value={password}
               onChange={(e) => setPassword(e.target.value)}

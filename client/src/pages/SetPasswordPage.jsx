@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import Alert from '../components/Alert.jsx';
+import PasswordInput from '../components/PasswordInput.jsx';
 import { authApi } from '../services/api.js';
 
 const MIN_LENGTH = 8;
@@ -48,9 +49,8 @@ export default function SetPasswordPage() {
         <input type="email" autoComplete="username" value={user.email} readOnly hidden />
 
         <label htmlFor="new-password">New password</label>
-        <input
+        <PasswordInput
           id="new-password"
-          type="password"
           autoComplete="new-password" // tells password managers to suggest a strong one
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -62,9 +62,8 @@ export default function SetPasswordPage() {
         <p className="hint">At least {MIN_LENGTH} characters. A short phrase is easier to remember and harder to guess.</p>
 
         <label htmlFor="confirm-password">Confirm password</label>
-        <input
+        <PasswordInput
           id="confirm-password"
-          type="password"
           autoComplete="new-password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
