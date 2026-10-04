@@ -142,3 +142,75 @@ Then open `https://<name>.onrender.com/api/health` → `{"status":"ok","database
 Free Render services **sleep after 15 minutes without traffic**. The next request wakes the service, which takes about a minute, so the first "Send OTP" after a quiet period is slow.
 
 To keep it awake, set up a free monitor at [UptimeRobot](https://uptimerobot.com) or cron-job.org to request `https://<name>.onrender.com/api/health` every 10 minutes. That fits within the free plan's 750 hours a month for one service.
+
+---
+
+## 4. Vercel: frontend
+
+### 4.1 Check the proxy target
+
+`client/vercel.json` forwards `/api/*` to the backend. Its `destination` must be **your** Render URL:
+
+```json
+{ "source": "/api/:path*", "destination": "https://otpsend-yswh.onrender.com/api/:path*" }
+```
+
+The second rule (`/(.*)` → `/index.html`) lets links like `/dashboard` or `/reset-password` open directly. Without it, Vercel would look for a file with that name and return 404.
+
+### 4.2 Import the project
+
+1. vercel.com → **Add New…** → **Project** → **Import** `lazyone01/otpSend` (give Vercel access to the repository if asked).
+2. Configure:
+
+   | Field | Value | Why |
+   |---|---|---|
+   | Project Name | e.g. `otpsend` | Becomes `https://otpsend.vercel.app` (or with a suffix if taken) |
+   | Framework Preset | **Vite** | Usually auto-detected |
+   | **Root Directory** | **`client`** | Click **Edit** and choose `client`; the repository holds two apps |
+   | Build Command | `npm run build` (default) | Produces static files in `dist/` |
+   | Output Directory | `dist` (default) | |
+   | Environment Variables | **none** | Leaving `VITE_API_URL` unset makes the app call `/api` on its own domain, which goes through the proxy |
+
+3. **Deploy**. It takes about 1 minute. Note the URL Vercel shows, e.g. `https://otpsend.vercel.app`.
+
+Use the **Production** URL (the short one under Domains), not a long preview URL such as `otpsend-abc123-lazyone01.vercel.app`. Preview URLs change with every deploy, and the backend only trusts one exact origin.
+
+---
+
+## 5. Connect the two (production environment variables)
+
+Render → your service → **Environment** → edit `CLIENT_URL`:
+
+```
+CLIENT_URL=https://otpsend.vercel.app      ← your exact Vercel production URL, no trailing slash
+```
+
+**Save changes**. Render redeploys automatically (about 2 minutes).
+
+| Variable | Where | Value |
+|---|---|---|
+| `CLIENT_URL` | Render | Your Vercel production URL. Used for CORS, the CSRF check and links in reset emails. |
+| `VITE_API_URL` | Vercel | **Not set.** API calls go to `/api` on the Vercel domain. |
+| everything else | Render | From `server/.env.production.local` (section 3.2) |
+
+Also update `CLIENT_URL` in `server/.env.production.local`, so your local copy matches what's deployed.
+
+---
+
+## 6. CORS and HTTPS: how this setup works
+
+```
+Browser ──HTTPS──▶ otpsend.vercel.app/api/auth/login ──HTTPS──▶ otpsend-yswh.onrender.com/api/auth/login
+          one site from the browser's view            Vercel forwards it server-to-server
+```
+
+- **CORS:** the browser only ever talks to `otpsend.vercel.app`. Requests are same-origin, so CORS doesn't apply in the browser at all. The backend still sends the CORS headers for `CLIENT_URL`, which is what makes direct calls work during local development.
+- **The CSRF check still runs:** browsers send `Origin: https://otpsend.vercel.app`, and Vercel passes it along, so the backend's Origin check compares it with `CLIENT_URL`.
+- **Cookies:** the login cookie belongs to `otpsend.vercel.app` (first-party), so Safari and Firefox don't block it. In production it's `HttpOnly; Secure; SameSite=Lax`.
+- **HTTPS:** Vercel and Render both provide certificates automatically, and both redirect `http://` to `https://`. The `Secure` cookie flag means the token is **never** sent over unencrypted HTTP. Without HTTPS, anyone on the same Wi-Fi could read OTPs, passwords and login cookies in transit.
+
+---
+
+## 7. Test the live app
+
+Follow **section 3 of [TESTING.md](TESTING.md)** with a real email address. Ideally use one that's not Gmail (e.g. Outlook), on your phone, on mobile data.
